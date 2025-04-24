@@ -1,14 +1,17 @@
+import joblib
 import streamlit as st
 import numpy as np
 import tensorflow as tf
 
 # Load your trained deep learning model (cached to avoid reloading on every run)
 @st.cache_resource
-def load_model():
+def load_model_and_scaler():
     model = tf.keras.models.load_model('irrigation_model.h5')
-    return model
+    scaler = joblib.load('scaler.save')
+    return model, scaler
 
-model = load_model()
+model, scaler = load_model_and_scaler()
+
 
 st.title("IoT-based Smart Water Irrigation System")
 
@@ -22,20 +25,25 @@ temperature = st.number_input("Temperature (°C)", min_value=-10.0, max_value=60
 humidity = st.number_input("Humidity (%)", min_value=0.0, max_value=100.0, value=50.0, step=0.1)
 
 if st.button("Predict Irrigation Need"):
-    # Prepare input data for prediction
-    input_data = np.array([[soil_moisture, temperature, humidity]])
+    # Raw input as numpy array
+    input_data_raw = np.array([[soil_moisture, temperature, humidity]])
     
-    # Predict irrigation need (assuming output is sigmoid probability)
-    prediction = model.predict(input_data)
-    irrigation_prob = prediction[0][0]
+    # Scale input using loaded scaler
+    input_data_scaled = scaler.transform(input_data_raw)
     
-    st.write(f"Prediction Probability: {irrigation_prob:.2f}")
-
-    # Threshold for decision can be adjusted
-    if irrigation_prob > 0.5:
-        st.success(f"Irrigation Recommended 🌱💧")
+    # Predict probabilities (shape: (1, 4))
+    prediction = model.predict(input_data_scaled)
+    
+    # Get predicted class index and probability
+    predicted_class = np.argmax(prediction[0])
+    class_prob = prediction[0][predicted_class]
+    
+    st.write(f"Predicted Class: {predicted_class} with probability {class_prob:.2f}")
+    
+    # Replace with your actual irrigation needed class index
+    IRRIGATION_NEEDED_CLASS_INDEX = 1  # <-- adjust accordingly
+    
+    if predicted_class == IRRIGATION_NEEDED_CLASS_INDEX:
+        st.success("Irrigation Recommended 🌱💧")
     else:
-        st.info(f"No Irrigation Needed 🚫")
-
-st.markdown("---")
-st.markdown("Developed by YourName | Smart Agriculture Project")
+        st.info("No Irrigation Needed 🚫")
